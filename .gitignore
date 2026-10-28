@@ -1,0 +1,33 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# 运行时数据
+uploads/
+logs/
+*.log
+
+# 本地敏感配置
+offerget-server/src/main/resources/application-local.yml
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db

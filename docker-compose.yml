@@ -1,0 +1,29 @@
+# OfferGet 本地开发数据库
+# 独立实例跑在 3307，不占用本机 MySQL 的 3306
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: offerget-mysql
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: offerget123
+      MYSQL_DATABASE: offerget
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    volumes:
+      - offerget-mysql-data:/var/lib/mysql
+      # 仅在数据卷首次初始化时执行；改表后需 docker compose down -v 重建
+      - ./Mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -pofferget123 --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  offerget-mysql-data:

@@ -1,0 +1,152 @@
+/* ---------- 精简 reset（替代 Tailwind preflight，避免影响 Element Plus） ----------
+ * 必须放在 base 层：未分层的规则优先级高于 Tailwind utilities，
+ * 否则 button/边框的 reset 会压过 bg-*、text-*、border-* 工具类。
+ */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: #e2e8f0;
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Inter Variable', 'Noto Sans SC', 'Microsoft YaHei', system-ui,
+      -apple-system, 'Segoe UI', sans-serif;
+    color: #020617;
+    background: #f8fbff;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  figure {
+    margin: 0;
+  }
+
+  ul,
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  img,
+  svg,
+  video {
+    display: block;
+    max-width: 100%;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    background: transparent;
+    cursor: pointer;
+  }
+}
+
+/* ---------- Element Plus 主题覆盖 ---------- */
+:root {
+  --el-color-primary: #2563eb;
+  --el-color-primary-light-3: #5b8def;
+  --el-color-primary-light-5: #8bb0f5;
+  --el-color-primary-light-7: #bcd2fa;
+  --el-color-primary-light-8: #d5e2fc;
+  --el-color-primary-light-9: #eaf1fe;
+  --el-color-primary-dark-2: #1d4ed8;
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+  --el-font-family: 'Inter Variable', 'Noto Sans SC', 'Microsoft YaHei', system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
+  --el-text-color-primary: #0f172a;
+  --el-text-color-regular: #475569;
+  --el-border-color: #dbeafe;
+  --el-border-color-light: #e5edfb;
+}
+
+.el-button {
+  font-weight: 600;
+}
+
+.el-drawer__header {
+  margin-bottom: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5edfb;
+}
+
+.el-message {
+  border-radius: 12px;
+}
+
+/* ---------- 全局滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.18);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 99, 235, 0.3);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- 页面通用 ---------- */
+.page-bg {
+  background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 48%, #f7fbff 100%);
+}
+
+.soft-card {
+  border: 1px solid rgba(219, 234, 254, 0.8);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.08);
+}
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+}

@@ -1,0 +1,61 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: offerget-server
+
+  # 本地覆盖配置（真实密码、JWT 密钥）放 application-local.yml，已被 .gitignore 忽略；
+  # 文件不存在时以下默认值依然可用，开箱即跑。
+  config:
+    import: optional:classpath:application-local.yml
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "jdbc:mysql://localhost:3307/offerget?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:offerget123}
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+  tomcat:
+    # 超限请求需要吞掉剩余数据才能正常返回 413，默认 2MB 会导致连接中断
+    max-swallow-size: 50MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+app:
+  jwt:
+    # HS256 要求密钥不少于 32 字节；生产务必通过 APP_JWT_SECRET 覆盖
+    secret: ${APP_JWT_SECRET:offerget-dev-secret-key-change-me-2027}
+    expiration-seconds: ${APP_JWT_EXPIRATION_SECONDS:7200}
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5175}
+  file:
+    # 简历文件存储根目录，相对后端运行目录
+    storage-root: ${APP_FILE_STORAGE_ROOT:./uploads}
+  crawl:
+    schedule:
+      # 每天定时采集关注公司的校招信息，enabled=false 可完全关闭
+      enabled: ${CRAWL_SCHEDULE_ENABLED:true}
+      cron: ${CRAWL_SCHEDULE_CRON:0 30 7 * * *}
+      zone: ${CRAWL_SCHEDULE_ZONE:Asia/Shanghai}
+      # 相邻两家公司之间的间隔，避免触发搜索接口限流
+      company-delay-millis: ${CRAWL_COMPANY_DELAY_MS:2000}
+  ai:
+    deepseek:
+      # OpenAI 兼容接口。api-key 只放在 application-local.yml 或环境变量中，
+      # 不要写进本文件、README 或前端代码。
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model: ${DEEPSEEK_MODEL:deepseek-chat}
+      timeout-seconds: ${DEEPSEEK_TIMEOUT_SECONDS:60}

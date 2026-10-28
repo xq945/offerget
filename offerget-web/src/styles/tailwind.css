@@ -1,0 +1,17 @@
+/*
+ * Tailwind v4：只引入 theme + utilities，跳过 preflight，
+ * 避免重置 Element Plus 的按钮、表单等基础样式。
+ */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@theme {
+  --font-sans: 'Inter Variable', 'Noto Sans SC', 'Microsoft YaHei', system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
+  --color-brand-500: #2563eb;
+  --color-brand-400: #38bdf8;
+  --shadow-soft: 0 14px 28px rgba(37, 99, 235, 0.18);
+  --shadow-card: 0 24px 60px rgba(37, 99, 235, 0.1);
+}
