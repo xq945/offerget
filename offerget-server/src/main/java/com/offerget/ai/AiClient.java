@@ -44,16 +44,29 @@ public class AiClient {
      * 配置缺失、网络失败、返回结构异常统一转成业务异常。
      */
     public String chatJson(String systemPrompt, String userPrompt) {
+        return chatJson(List.of(
+                new Message("system", systemPrompt),
+                new Message("user", userPrompt)), 0.3);
+    }
+
+    /**
+     * 多轮消息版本，供模拟面试等需要携带对话历史的场景使用。
+     * temperature 由调用方按任务选择：评分偏低、出题偏高。
+     */
+    public String chatJson(List<Message> messages, double temperature) {
         if (!properties.configured()) {
-            throw BusinessException.badRequest("未配置 DeepSeek 密钥，请先在 application-local.yml 中填写 api-key");
+            throw notConfigured();
+        }
+        if (messages == null || messages.isEmpty()) {
+            throw BusinessException.badRequest("AI 消息不能为空");
         }
 
         Map<String, Object> payload = Map.of(
                 "model", properties.model(),
-                "messages", List.of(
-                        Map.of("role", "system", "content", systemPrompt),
-                        Map.of("role", "user", "content", userPrompt)),
-                "temperature", 0.3,
+                "messages", messages.stream()
+                        .map(message -> Map.of("role", message.role(), "content", message.content()))
+                        .toList(),
+                "temperature", Math.max(0, Math.min(temperature, 2)),
                 "max_tokens", MAX_TOKENS,
                 "response_format", Map.of("type", "json_object"));
 
@@ -213,6 +226,9 @@ public class AiClient {
             return "";
         }
         return text.length() > 200 ? text.substring(0, 200) + "…" : text;
+    }
+
+    public record Message(String role, String content) {
     }
 
     public record SearchResult(

@@ -151,6 +151,9 @@ function handleCommand(command, job) {
   else if (command === 'match') {
     router.push({ name: 'ai-match', query: { jobId: job.id } })
   }
+  else if (command === 'mock-interview') {
+    router.push({ name: 'mock-interview', query: { jobId: job.id } })
+  }
   else if (command === 'delete') {
     confirmDelete(job)
   }
@@ -315,6 +318,7 @@ onMounted(() => {
                   <el-dropdown-menu>
                     <el-dropdown-item command="edit">编辑岗位</el-dropdown-item>
                     <el-dropdown-item command="match">AI 匹配</el-dropdown-item>
+                    <el-dropdown-item command="mock-interview">模拟面试</el-dropdown-item>
                     <el-dropdown-item
                       v-for="option in STATUS_OPTIONS.filter((item) => item.value !== job.status)"
                       :key="option.value"

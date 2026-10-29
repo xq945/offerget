@@ -8,6 +8,7 @@ import {
   CircleAlert,
   MessageSquareMore,
   PenLine,
+  Sparkles,
 } from 'lucide-vue-next'
 
 import {
@@ -55,21 +56,38 @@ async function handleAllRead() {
   }
 }
 
-async function handleClick(item) {
-  if (!item.read) {
-    try {
-      await markNotificationRead(item.key)
-      item.read = true
-      unreadCount.value = Math.max(0, unreadCount.value - 1)
-    }
-    catch {
-      // 已失效的提醒忽略即可
-    }
+async function markItemRead(item) {
+  if (item.read) {
+    return
   }
+  try {
+    await markNotificationRead(item.key)
+    item.read = true
+    unreadCount.value = Math.max(0, unreadCount.value - 1)
+  }
+  catch {
+    // 已失效的提醒忽略即可
+  }
+}
+
+async function handleClick(item) {
+  await markItemRead(item)
   visible.value = false
   if (item.company) {
     router.push({ name: 'jobs', query: { keyword: item.company } })
   }
+}
+
+function canMock(item) {
+  const type = item.type || ''
+  return Boolean(item.jobId)
+    && (type.startsWith('INTERVIEW') || type.startsWith('TEST'))
+}
+
+async function handleMock(item) {
+  await markItemRead(item)
+  visible.value = false
+  router.push({ name: 'mock-interview', query: { jobId: item.jobId } })
 }
 
 function iconOf(item) {
@@ -149,24 +167,39 @@ onBeforeUnmount(() => {
 
       <div class="max-h-[380px] overflow-y-auto">
         <ul v-if="items.length" class="divide-y divide-blue-50/70">
-          <li v-for="item in items" :key="item.key">
-            <button
-              class="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-blue-50/40"
-              @click="handleClick(item)"
-            >
-              <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg" :class="toneOf(item.level)">
-                <component :is="iconOf(item)" class="h-4 w-4" />
-              </span>
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-xs font-bold" :class="item.read ? 'text-slate-500' : 'text-slate-800'">
-                  {{ item.title }}
-                </p>
-                <p class="mt-0.5 line-clamp-2 text-[11px] leading-5 text-slate-400">
-                  {{ item.description }}
-                </p>
-              </div>
-              <span v-if="!item.read" class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
-            </button>
+          <li
+            v-for="item in items"
+            :key="item.key"
+            class="transition hover:bg-blue-50/40"
+          >
+            <div class="flex items-start gap-2 px-4 py-3">
+              <button
+                class="flex min-w-0 flex-1 items-start gap-3 text-left"
+                @click="handleClick(item)"
+              >
+                <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg" :class="toneOf(item.level)">
+                  <component :is="iconOf(item)" class="h-4 w-4" />
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-xs font-bold" :class="item.read ? 'text-slate-500' : 'text-slate-800'">
+                    {{ item.title }}
+                  </p>
+                  <p class="mt-0.5 line-clamp-2 text-[11px] leading-5 text-slate-400">
+                    {{ item.description }}
+                  </p>
+                </div>
+                <span v-if="!item.read" class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+              </button>
+              <button
+                v-if="canMock(item)"
+                class="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border border-blue-100 bg-white px-2.5 py-1 text-[10px] font-bold text-blue-600 transition hover:border-blue-200 hover:bg-blue-50"
+                title="针对该岗位开始模拟面试"
+                @click="handleMock(item)"
+              >
+                <Sparkles class="h-3 w-3" />
+                去模拟
+              </button>
+            </div>
           </li>
         </ul>
 

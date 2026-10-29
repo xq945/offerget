@@ -4,6 +4,8 @@
 
 ## 功能
 
+> 按模块整理的完整功能清单见 [docs/功能清单.md](docs/功能清单.md)。
+
 ### 一期（已实现）
 
 - **营销首页**：Hero 产品演示、核心能力、价值主张、行动入口
@@ -16,16 +18,17 @@
 ### 二期（已实现）
 
 - **个人中心**：资料修改、修改密码、使用统计（岗位 / 简历 / 匹配 / 优化）
-- **投递复盘**：投递漏斗、环节转化率、近 6 个月投递趋势、高频缺失关键词、自动复盘结论
+- **投递复盘**：投递漏斗、环节转化率、近 6 个月投递趋势、高频缺失关键词、模拟面试场次与平均分、自动复盘结论
 - **简历优化**：按 JD 缺失词生成分段改写建议，给出预估优化后匹配分，保留优化历史
 - **校招信息库**：12 条公共校招岗位，支持行业 / 城市 / 关键词筛选，一键加入我的投递
 - **简历制作器**：结构化表单 + A4 实时预览 + 浏览器打印导出 PDF，保存后可直接参与 AI 匹配
 - **自动填充**：从在线简历或上传简历中提取网申字段，逐项复制，减少重复填写
-- **智能提醒**：右上角铃铛汇总今日 / 明后天面试与笔试、3 天内截止、逾期未投递，支持单条已读、全部已读；已读状态按天重置
+- **智能提醒**：右上角铃铛汇总今日 / 明后天面试与笔试、3 天内截止、逾期未投递，支持单条已读、全部已读；已读状态按天重置；面试 / 笔试提醒可直接进入该岗位模拟面试
 
 ### 三期（已实现）
 
 - **AI 简历定制**：按岗位 JD 逐段改写实习 / 项目 / 技能 / 自我评价，AI 只做重组与措辞调整；改写稿经过事实校验（新增技能、数字、年份、强动词告警）并逐段 diff 审阅，确认后才生成新版本，原版本保留
+- **AI 模拟面试**：基于岗位 JD 与简历生成固定题单，逐题作答与最多 2 层追问，结束前进入反问环节；面试过程不提示，结束后生成总分、维度分、逐题点评与风险标记，评分异步执行；支持恢复进行中的会话，并与同岗位历史成绩对比；可从岗位列表与面试 / 笔试提醒直接进入
 - **校招信息采集**：维护关注公司，按招聘官网定向搜索与抓取，AI 抽取岗位与招聘项目时间线；结果先进入待审核，确认后才写入信息库，重复采集只更新截止日期等关键字段
 - **定时采集**：每天 07:30 自动遍历启用的关注公司批量采集，单家失败不影响其他；也可在页面手动「全部采集」
 
@@ -54,9 +57,9 @@ offerget/
 │       ├── config/               # Security / MyBatis-Plus / 静态资源
 │       ├── security/             # JWT 生成、过滤器、当前用户
 │       ├── entity/ enums/ mapper/
-│       ├── dto/                  # auth / job / resume / ai / dashboard / profile / review / company
+│       ├── dto/                  # auth / job / resume / ai / interview / dashboard / profile / review / company
 │       ├── service/              # 接口
-│       ├── service/impl/         # 实现（AI 匹配、简历优化、文本提取、自动填充）
+│       ├── service/impl/         # 实现（AI 匹配、简历优化、模拟面试、文本提取、自动填充）
 │       └── controller/
 └── offerget-web/                 # Vue 前端（5175）
     └── src/
@@ -64,7 +67,7 @@ offerget/
         ├── layouts/              # 营销页布局 / 工作台布局
         ├── components/           # 统计卡、趋势图、台历、分数环、抽屉等
         ├── views/                # 首页、登录、总览、投递、简历、AI 匹配、
-        │                         # 个人中心、复盘、优化、信息库、制作器、自动填充
+        │                         # 个人中心、复盘、优化、信息库、制作器、自动填充、模拟面试
         ├── stores/user.js
         ├── router/index.js
         └── styles/               # Tailwind 与 Element Plus 主题
@@ -84,12 +87,18 @@ offerget/
 docker compose up -d
 ```
 
-首次启动会自动执行 `Mysql/offerget_init.sql`，创建 `offerget` 库、7 张表与演示数据。容器健康检查通过后即可使用。
+首次启动会自动执行 `Mysql/offerget_init.sql`，创建 `offerget` 库、13 张表与演示数据。容器健康检查通过后即可使用。
 
 如果数据库是从一期升级而来（表已存在），执行一次二期迁移：
 
 ```bash
 docker exec -i offerget-mysql mysql -uroot -pofferget123 offerget < Mysql/migration/20261027_phase2.sql
+```
+
+已有数据库升级到当前版本时，再补执行 AI 模拟面试迁移（已执行过的可跳过）：
+
+```bash
+docker exec -i offerget-mysql mysql -uroot -pofferget123 offerget < Mysql/migration/20261029_mock_interview.sql
 ```
 
 ### 2. 启动后端
@@ -187,6 +196,13 @@ npm run dev
 | POST | `/api/resumes/builder` | 创建结构化在线简历 |
 | PUT | `/api/resumes/{id}/builder` | 更新结构化在线简历 |
 | GET | `/api/resumes/{id}/autofill` | 提取网申字段 |
+| POST | `/api/mock-interviews` | 创建模拟面试并生成题单 |
+| GET | `/api/mock-interviews` | 模拟面试历史（可按 jobId 过滤） |
+| GET | `/api/mock-interviews/{id}` | 会话详情 / 恢复进行中的面试 |
+| POST | `/api/mock-interviews/{id}/answers` | 提交作答，返回追问或下一题 |
+| POST | `/api/mock-interviews/{id}/reverse` | 反问环节 |
+| POST | `/api/mock-interviews/{id}/finish` | 结束面试并生成报告 |
+| POST | `/api/mock-interviews/{id}/abandon` | 放弃面试 |
 | GET | `/api/notifications` | 提醒列表与未读数 |
 | PUT | `/api/notifications/read` | 单条提醒标记已读 |
 | PUT | `/api/notifications/read-all` | 全部标记已读 |
@@ -202,6 +218,8 @@ npm run dev
 | `job_event` | 求职事件（台历与待办） |
 | `resume_optimization` | 简历优化记录（分段建议、预估分） |
 | `resume_customization` | AI 简历定制记录（逐段改写、事实告警、前后匹配分） |
+| `mock_interview_session` | AI 模拟面试会话（岗位、简历、状态、总分、报告） |
+| `mock_interview_question` | 模拟面试题目与作答（追问链、逐题评分、风险标记） |
 | `crawl_watch_company` | 校招关注公司（官网域名、目标届别、上次采集时间） |
 | `crawl_draft` | 校招采集候选（人工确认后才写入信息库） |
 | `company_calendar` | 校招信息库（公共只读数据） |
@@ -240,6 +258,12 @@ docker compose up -d
 **提醒是怎么生成的？**
 后端按当前日期动态计算，不依赖定时任务：今天 / 明后天的面试与笔试事件、3 天内截止的岗位、已过截止但仍待投递的岗位。提醒 key 内包含日期，因此每天 0 点后会重新变为未读；点击条目会标记已读并跳到对应公司的投递列表。前端每 60 秒刷新一次未读数。
 
+**模拟面试的分数和 AI 匹配分是一回事吗？**
+不是。AI 匹配分是简历与 JD 的关键词规则得分，用于判断简历与岗位的贴合度；模拟面试分是对面试回答的 AI 评估（岗位理解、项目深度、技术基础、表达逻辑、STAR 完整性），只用于练习参考，不写回岗位匹配分。
+
+**模拟面试会发送什么给 AI？**
+创建与作答时会发送岗位 JD、简历文本、题目、你的回答与追问内容至 DeepSeek，用于生成题目、追问与评分。简历文本可能包含手机号或邮箱，请确认可以接受后再使用。未配置 DeepSeek 密钥时该功能不可用，不影响其他模块。
+
 ## AI 接入状态
 
 DeepSeek 配置已就绪（`app.ai.deepseek`）：密钥只存放在 `application-local.yml`，后端提供带鉴权的 `RestClient` Bean 与 `GET /api/ai/config` 配置检查接口。
@@ -247,6 +271,8 @@ DeepSeek 配置已就绪（`app.ai.deepseek`）：密钥只存放在 `applicatio
 **AI 简历定制**已接入 DeepSeek（`deepseek-chat`）：调用时会发送岗位 JD 与简历文本至 DeepSeek，仅用于本次改写。模型只做重组与措辞调整，输出再经过事实校验（新增技能、数字、年份、强动词）与逐段人工确认，才会写入新版本；原版本始终保留。未配置密钥时该功能不可用，不影响其他模块。
 
 **校招信息采集**同样基于 DeepSeek：Search 按 `site:` 定向搜索官网，Fetch 抓取页面 Markdown，chat 抽取岗位与项目时间线。发送的只有公开网页内容，不涉及个人简历；结果先进入候选表，人工确认后入库。宣讲会、行程类活动不采集。
+
+**AI 模拟面试**同样基于 DeepSeek：创建时发送岗位 JD 与简历文本，一次性生成题单；作答时发送题目、回答与追问记录，用于决策追问和逐题评分。追问最多 2 层，评分在题目完成后异步执行；结束报告由本地聚合，AI 不可用时仍可基于已答内容生成（总评使用本地模板）。模拟分不写回岗位匹配分。
 
 AI 匹配与简历优化仍使用本地规则引擎，不消耗 API 额度；后续接入大模型时保持现有返回结构不变即可平滑替换。
 

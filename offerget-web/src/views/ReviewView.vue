@@ -7,6 +7,7 @@ import {
   FileText,
   Lightbulb,
   MessageSquareMore,
+  MessagesSquare,
   Send,
   TrendingUp,
   Trophy,
@@ -41,6 +42,7 @@ const stages = computed(() => {
 
 const cards = computed(() => {
   const funnel = review.value?.funnel
+  const interviewStats = review.value?.interviewStats
   return [
     {
       label: '管理岗位',
@@ -74,6 +76,18 @@ const cards = computed(() => {
       tone: 'bg-gradient-to-br from-emerald-500 to-teal-400',
       badge: '',
     },
+    {
+      label: '模拟面试',
+      value: interviewStats?.completedCount ?? 0,
+      hint: interviewStats?.averageScore != null
+        ? `平均 ${interviewStats.averageScore} 分`
+        : interviewStats?.inProgressCount > 0
+          ? `${interviewStats.inProgressCount} 场进行中`
+          : '还没有完成记录',
+      icon: MessagesSquare,
+      tone: 'bg-gradient-to-br from-violet-500 to-indigo-400',
+      badge: '',
+    },
   ]
 })
 
@@ -104,17 +118,26 @@ onMounted(loadReview)
         <h2 class="text-2xl font-black text-slate-950">投递复盘</h2>
         <p class="mt-1 text-sm text-slate-500">用转化率和关键词缺口，看清投递节奏卡在哪一步。</p>
       </div>
-      <button
-        class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-blue-100 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
-        @click="router.push({ name: 'jobs' })"
-      >
-        返回投递列表
-        <ArrowRight class="h-4 w-4" />
-      </button>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-blue-100 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+          @click="router.push({ name: 'mock-interview' })"
+        >
+          <MessagesSquare class="h-4 w-4" />
+          去模拟面试
+        </button>
+        <button
+          class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-blue-100 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+          @click="router.push({ name: 'jobs' })"
+        >
+          返回投递列表
+          <ArrowRight class="h-4 w-4" />
+        </button>
+      </div>
     </section>
 
     <template v-if="review">
-      <section v-if="review.funnel.total > 0" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section v-if="review.funnel.total > 0" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
           v-for="card in cards"
           :key="card.label"

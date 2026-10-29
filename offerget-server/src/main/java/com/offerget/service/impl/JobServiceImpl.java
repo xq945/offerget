@@ -21,12 +21,16 @@ import com.offerget.dto.job.JobVO;
 import com.offerget.entity.AiMatchRecord;
 import com.offerget.entity.Job;
 import com.offerget.entity.JobEvent;
+import com.offerget.entity.MockInterviewQuestion;
+import com.offerget.entity.MockInterviewSession;
 import com.offerget.entity.Resume;
 import com.offerget.enums.EventType;
 import com.offerget.enums.JobStatus;
 import com.offerget.mapper.AiMatchRecordMapper;
 import com.offerget.mapper.JobEventMapper;
 import com.offerget.mapper.JobMapper;
+import com.offerget.mapper.MockInterviewQuestionMapper;
+import com.offerget.mapper.MockInterviewSessionMapper;
 import com.offerget.mapper.ResumeMapper;
 import com.offerget.security.SecurityUtils;
 import com.offerget.service.JobService;
@@ -44,6 +48,10 @@ public class JobServiceImpl implements JobService {
     private final JobEventMapper jobEventMapper;
 
     private final AiMatchRecordMapper matchRecordMapper;
+
+    private final MockInterviewSessionMapper mockInterviewSessionMapper;
+
+    private final MockInterviewQuestionMapper mockInterviewQuestionMapper;
 
     @Override
     public PageResult<JobVO> page(PageQuery pageQuery, String status, String keyword) {
@@ -139,6 +147,18 @@ public class JobServiceImpl implements JobService {
         matchRecordMapper.delete(new LambdaQueryWrapper<AiMatchRecord>()
                 .eq(AiMatchRecord::getJobId, job.getId())
                 .eq(AiMatchRecord::getUserId, job.getUserId()));
+
+        List<MockInterviewSession> sessions = mockInterviewSessionMapper.selectList(
+                new LambdaQueryWrapper<MockInterviewSession>()
+                        .eq(MockInterviewSession::getJobId, job.getId())
+                        .eq(MockInterviewSession::getUserId, job.getUserId()));
+        if (!sessions.isEmpty()) {
+            List<Long> sessionIds = sessions.stream().map(MockInterviewSession::getId).toList();
+            mockInterviewQuestionMapper.delete(new LambdaQueryWrapper<MockInterviewQuestion>()
+                    .in(MockInterviewQuestion::getSessionId, sessionIds));
+            mockInterviewSessionMapper.delete(new LambdaQueryWrapper<MockInterviewSession>()
+                    .in(MockInterviewSession::getId, sessionIds));
+        }
     }
 
     private Job requireOwnedJob(Long id) {

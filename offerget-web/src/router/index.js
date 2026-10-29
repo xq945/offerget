@@ -83,6 +83,12 @@ const routes = [
         meta: { title: '简历定制' },
       },
       {
+        path: 'mock-interview',
+        name: 'mock-interview',
+        component: () => import('@/views/MockInterviewView.vue'),
+        meta: { title: '模拟面试' },
+      },
+      {
         path: 'review',
         name: 'review',
         component: () => import('@/views/ReviewView.vue'),

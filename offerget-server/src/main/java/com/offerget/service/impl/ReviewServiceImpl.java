@@ -17,11 +17,13 @@ import com.offerget.dto.review.ReviewVO;
 import com.offerget.entity.AiMatchRecord;
 import com.offerget.entity.Job;
 import com.offerget.entity.JobEvent;
+import com.offerget.entity.MockInterviewSession;
 import com.offerget.enums.EventType;
 import com.offerget.enums.JobStatus;
 import com.offerget.mapper.AiMatchRecordMapper;
 import com.offerget.mapper.JobEventMapper;
 import com.offerget.mapper.JobMapper;
+import com.offerget.mapper.MockInterviewSessionMapper;
 import com.offerget.security.SecurityUtils;
 import com.offerget.service.ReviewService;
 
@@ -47,6 +49,8 @@ public class ReviewServiceImpl implements ReviewService {
     private final JobEventMapper jobEventMapper;
 
     private final AiMatchRecordMapper matchRecordMapper;
+
+    private final MockInterviewSessionMapper mockInterviewSessionMapper;
 
     private final ObjectMapper objectMapper;
 
@@ -109,8 +113,29 @@ public class ReviewServiceImpl implements ReviewService {
 
         List<ReviewVO.KeywordCount> missingKeywords = buildMissingKeywords(matches);
         List<String> insights = buildInsights(jobs, funnel, averageScore, missingKeywords);
+        ReviewVO.InterviewStats interviewStats = buildInterviewStats(userId);
 
-        return new ReviewVO(funnel, List.of(monthly), averageScore, missingKeywords, insights);
+        return new ReviewVO(funnel, List.of(monthly), averageScore, missingKeywords,
+                interviewStats, insights);
+    }
+
+    private ReviewVO.InterviewStats buildInterviewStats(Long userId) {
+        List<MockInterviewSession> sessions = mockInterviewSessionMapper.selectList(
+                new LambdaQueryWrapper<MockInterviewSession>()
+                        .eq(MockInterviewSession::getUserId, userId));
+        List<MockInterviewSession> completed = sessions.stream()
+                .filter(session -> "COMPLETED".equals(session.getStatus()))
+                .filter(session -> session.getTotalScore() != null)
+                .toList();
+        long inProgress = sessions.stream()
+                .filter(session -> "IN_PROGRESS".equals(session.getStatus()))
+                .count();
+        OptionalDouble average = completed.stream()
+                .mapToInt(MockInterviewSession::getTotalScore)
+                .average();
+        Integer averageScore = average.isPresent()
+                ? (int) Math.round(average.getAsDouble()) : null;
+        return new ReviewVO.InterviewStats(completed.size(), averageScore, inProgress);
     }
 
     private ReviewVO.MonthlyPoint[] buildMonthly(List<Job> jobs) {
