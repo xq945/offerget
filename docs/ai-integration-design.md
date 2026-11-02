@@ -14,7 +14,7 @@
 | AI 匹配 | 本地规则引擎 `AiMatchEngine` | 70 词技能词典 + 加权命中率，不上传简历 |
 | 简历优化 | 本地规则引擎 `ResumeOptimizeEngine` | 仅生成文字建议，不改简历；`scoreAfter` 为公式估算 |
 | 校招信息库 | 手工维护 12 条 `company_calendar` | 公共只读，无自动更新 |
-| DeepSeek | 配置与 `RestClient` Bean 就绪 | 尚未被业务调用 |
+| DeepSeek | Spring AI `ChatClient`（2.0.1 DeepSeek starter） | chat 已用于采集抽取、简历定制、模拟面试；Search / Fetch 仍走 `RestClient` |
 
 ### 0.2 本设计要解决的两件事
 
@@ -40,24 +40,24 @@
 
 ### 1.1 AiClient
 
-复用现有 [`DeepSeekConfig`](../offerget-server/src/main/java/com/offerget/config/DeepSeekConfig.java) 的 `RestClient` Bean，新增一个薄封装：
+chat 由 Spring AI 的 `ChatClient` 负责（`spring-ai-starter-model-deepseek` 自动装配 `DeepSeekChatModel`）；Search / Fetch 是 DeepSeek 专有工具接口，Spring AI 没有对应抽象，继续用 [`DeepSeekConfig`](../offerget-server/src/main/java/com/offerget/config/DeepSeekConfig.java) 中的 `RestClient` 封装。统一门面：
 
 ```java
-public interface AiClient {
-    String chat(List<ChatMessage> messages, boolean jsonMode);          // POST /chat/completions
-    List<SearchResult> search(String query, int count, boolean needContent); // POST /v1/tools/search
-    FetchResult fetch(String url);                                       // POST /v1/tools/fetch
+public final class AiClient {
+    String chatJson(String systemPrompt, String userPrompt);
+    String chatJson(List<Message> messages, double temperature);   // JSON 模式，返回原始 JSON 字符串
+    List<SearchResult> search(String query, int count);             // POST /v1/tools/search
+    String fetchMarkdown(String url);                               // POST /v1/tools/fetch
 }
 ```
 
 要点：
 
-- **配置守卫**：调用前检查 `DeepSeekProperties.configured()`，未配置时抛 `BusinessException`，提示「未配置 AI 密钥」
-- **超时**：chat 120s，search 30s，fetch 90s（现有 Bean 的 60s 读超时对 fetch 偏紧，需单独配置或改用独立 RestClient）
-- **限流**：采集任务串行执行，天然低于 5 QPS；如需并发，用 `Semaphore(3)` 控制
-- **重试**：仅对网络错误和 5xx 重试 1 次，4xx 不重试
-- **日志**：记录 requestId、耗时、token 用量、调用类型；**不记录简历正文和密钥**。不做成本记账表和上限熔断——单次成本低于 0.05 元，量级不构成风险，日志足以在异常时定位
-- **降级**：AI 不可用时，采集与定制功能返回明确错误，不影响现有匹配/优化/投递主流程
+- **配置守卫**：`DeepSeekConfig.configured(apiKey)` 判断；空值或占位值 `not-configured` 视为未配置，抛 400。占位值让 Spring AI 自动配置在没有密钥时也能启动
+- **结构化输出**：`DeepSeekChatOptions.responseFormat(JSON_OBJECT)` 开启 JSON 模式，调用方统一用 Jackson 3 解析并做字段校验
+- **超时**：自定义 `RestClient.Builder` 统一 10s 连接超时、`app.ai.deepseek.timeout-seconds`（默认 60s）读超时，Spring AI 自动配置直接复用
+- **日志**：记录耗时与 token 用量；**不记录简历正文和密钥**
+- **降级**：AI 不可用时统一转 502；业务侧各自决定降级（采集跳过该页、评分置空、总评用本地模板），不影响匹配/优化/投递主流程
 
 ### 1.2 结构化输出约定
 

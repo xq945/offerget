@@ -39,7 +39,7 @@
 | 层 | 选型 |
 |---|---|
 | 前端 | Vue 3.5、Vite 8、Vue Router 5、Pinia 4、Element Plus 2.14、Tailwind CSS 4、axios、lucide-vue-next |
-| 后端 | Java 21、Spring Boot 4.1.1、Spring Security、MyBatis-Plus 3.5.17、jjwt 0.12.7、Apache Tika 3.3.2、Lombok |
+| 后端 | Java 21、Spring Boot 4.1.1、Spring Security、MyBatis-Plus 3.5.17、Spring AI 2.0.1（DeepSeek starter）、jjwt 0.12.7、Apache Tika 3.3.2、Lombok |
 | 数据库 | MySQL 8.0（Docker，独立实例） |
 | 构建 | Maven / npm |
 
@@ -47,7 +47,7 @@
 
 ```
 offerget/
-├── docker-compose.yml            # MySQL 8.0（3307）
+├── docker-compose.yml            # MySQL 8.0（13307）
 ├── Mysql/
 │   ├── offerget_init.sql          # 建表 + 演示数据（新环境一次建好）
 │   └── migration/20261027_phase2.sql  # 一期库升级到二期
@@ -141,7 +141,7 @@ npm run dev
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5175` | 允许的前端来源 |
 | `APP_FILE_STORAGE_ROOT` | `./uploads` | 简历文件存储目录 |
 | `DEEPSEEK_API_KEY` | 空 | DeepSeek 密钥，仅服务端使用，不可下发前端 |
-| `DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek 模型名 |
+| `DEEPSEEK_MODEL` | `deepseek-flash` | DeepSeek 模型名（当前为 V4.1 Flash；`deepseek-chat` 已于 2026-07-24 停用） |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容接口地址 |
 | `CRAWL_SCHEDULE_ENABLED` | `true` | 是否启用定时采集 |
 | `CRAWL_SCHEDULE_CRON` | `0 30 7 * * *` | 定时采集 cron（默认每天 07:30） |
@@ -230,7 +230,7 @@ npm run dev
 ## 常见问题
 
 **端口被占用？**
-后端默认 8082、前端 5175、数据库 3307。若被占用，修改 `offerget-server/src/main/resources/application.yml` 的 `server.port`、`offerget-web/vite.config.js` 的 `server.port` 与代理目标。
+后端默认 8082、前端 5175、数据库 13307（可用 `DB_PORT` 覆盖）。若被占用，修改 `offerget-server/src/main/resources/application.yml` 的 `server.port`、`offerget-web/vite.config.js` 的 `server.port` 与代理目标。
 
 **修改了 SQL 没有生效？**
 初始化脚本只在数据卷首次创建时执行。需要重建：
@@ -266,9 +266,9 @@ docker compose up -d
 
 ## AI 接入状态
 
-DeepSeek 配置已就绪（`app.ai.deepseek`）：密钥只存放在 `application-local.yml`，后端提供带鉴权的 `RestClient` Bean 与 `GET /api/ai/config` 配置检查接口。
+DeepSeek chat 已接入 Spring AI（`spring.ai.deepseek.*`，2.0 起 chat 选项直接挂在 `chat` 下）：业务统一通过 `ChatClient` 调用，JSON 模式由 `DeepSeekChatOptions.responseFormat` 设置；Search / Fetch 是 DeepSeek 专有工具接口，Spring AI 没有对应抽象，仍由 `RestClient` 封装。密钥只存放在 `application-local.yml` 或环境变量；未配置时 `spring.ai.deepseek.api-key` 取占位值，应用照常启动，`GET /api/ai/config` 返回 `configured=false`。
 
-**AI 简历定制**已接入 DeepSeek（`deepseek-chat`）：调用时会发送岗位 JD 与简历文本至 DeepSeek，仅用于本次改写。模型只做重组与措辞调整，输出再经过事实校验（新增技能、数字、年份、强动词）与逐段人工确认，才会写入新版本；原版本始终保留。未配置密钥时该功能不可用，不影响其他模块。
+**AI 简历定制**已接入 DeepSeek（`deepseek-flash`）：调用时会发送岗位 JD 与简历文本至 DeepSeek，仅用于本次改写。模型只做重组与措辞调整，输出再经过事实校验（新增技能、数字、年份、强动词）与逐段人工确认，才会写入新版本；原版本始终保留。未配置密钥时该功能不可用，不影响其他模块。
 
 **校招信息采集**同样基于 DeepSeek：Search 按 `site:` 定向搜索官网，Fetch 抓取页面 Markdown，chat 抽取岗位与项目时间线。发送的只有公开网页内容，不涉及个人简历；结果先进入候选表，人工确认后入库。宣讲会、行程类活动不采集。
 

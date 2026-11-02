@@ -24,7 +24,21 @@
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <jjwt.version>0.12.7</jjwt.version>
         <tika.version>3.3.2</tika.version>
+        <!-- Spring AI 2.0.x 对应 Spring Boot 4.x -->
+        <spring-ai.version>2.0.1</spring-ai.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- ===== Web 与参数校验 ===== -->
@@ -78,6 +92,12 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- ===== AI（Spring AI，DeepSeek 官方 starter） ===== -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-deepseek</artifactId>
         </dependency>
 
         <!-- ===== 简历文本提取（PDF / DOCX / TXT） ===== -->

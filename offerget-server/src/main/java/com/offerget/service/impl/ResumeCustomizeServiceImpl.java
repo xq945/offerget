@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +21,6 @@ import org.springframework.util.StringUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.offerget.ai.AiClient;
 import com.offerget.common.BusinessException;
-import com.offerget.config.DeepSeekProperties;
 import com.offerget.dto.ai.ApplyCustomizeRequest;
 import com.offerget.dto.ai.CustomizeRequest;
 import com.offerget.dto.ai.CustomizeResultVO;
@@ -116,7 +116,7 @@ public class ResumeCustomizeServiceImpl implements ResumeCustomizeService {
 
     private final ResumeService resumeService;
 
-    private final DeepSeekProperties deepSeekProperties;
+    private final DeepSeekChatProperties deepSeekProperties;
 
     private final ObjectMapper objectMapper;
 
@@ -170,7 +170,7 @@ public class ResumeCustomizeServiceImpl implements ResumeCustomizeService {
         entity.setJobId(job.getId());
         entity.setSourceResumeId(resume.getId());
         entity.setResumeType(builder ? TYPE_BUILDER : "TEXT");
-        entity.setModel(deepSeekProperties.model());
+        entity.setModel(deepSeekProperties.getModel());
         entity.setSectionsJson(objectMapper.writeValueAsString(sections));
         entity.setWarningsJson(objectMapper.writeValueAsString(collectWarnings(sections)));
         entity.setScoreBefore(scoreBefore);

@@ -2,12 +2,14 @@ package com.offerget.controller;
 
 import java.util.Map;
 
+import org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatProperties;
+import org.springframework.ai.model.deepseek.autoconfigure.DeepSeekConnectionProperties;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.offerget.common.ApiResponse;
-import com.offerget.config.DeepSeekProperties;
+import com.offerget.config.DeepSeekConfig;
 
 import lombok.RequiredArgsConstructor;
 
@@ -16,7 +18,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AiConfigController {
 
-    private final DeepSeekProperties deepSeekProperties;
+    private final DeepSeekConnectionProperties connectionProperties;
+
+    private final DeepSeekChatProperties chatProperties;
 
     /**
      * 仅返回是否配置与模型名，永远不返回 api-key。
@@ -24,9 +28,9 @@ public class AiConfigController {
     @GetMapping("/config")
     public ApiResponse<Map<String, Object>> config() {
         return ApiResponse.success(Map.of(
-                "configured", deepSeekProperties.configured(),
-                "model", deepSeekProperties.model() == null ? "" : deepSeekProperties.model(),
-                "baseUrl", deepSeekProperties.baseUrl() == null ? "" : deepSeekProperties.baseUrl()));
+                "configured", DeepSeekConfig.configured(connectionProperties.getApiKey()),
+                "model", chatProperties.getModel() == null ? "" : chatProperties.getModel(),
+                "baseUrl", connectionProperties.getBaseUrl() == null ? "" : connectionProperties.getBaseUrl()));
     }
 
 }

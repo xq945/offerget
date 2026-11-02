@@ -5,6 +5,10 @@ spring:
   datasource:
     username: root
     password: offerget123
+  ai:
+    deepseek:
+      # 在 https://platform.deepseek.com 创建，只填在本地文件或环境变量里
+      api-key: sk-your-deepseek-api-key
 
 app:
   jwt:
@@ -14,7 +18,3 @@ app:
     allowed-origins: http://localhost:5175
   file:
     storage-root: ./uploads
-  ai:
-    deepseek:
-      # 在 https://platform.deepseek.com 创建，只填在本地文件或环境变量里
-      api-key: sk-your-deepseek-api-key

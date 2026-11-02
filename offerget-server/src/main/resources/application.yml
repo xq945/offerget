@@ -12,7 +12,8 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: "jdbc:mysql://localhost:3307/offerget?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
+    # 默认连 docker-compose 的 13307；可用 DB_PORT 覆盖
+    url: "jdbc:mysql://localhost:${DB_PORT:13307}/offerget?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:offerget123}
 
@@ -24,6 +25,17 @@ spring:
   tomcat:
     # 超限请求需要吞掉剩余数据才能正常返回 413，默认 2MB 会导致连接中断
     max-swallow-size: 50MB
+
+  ai:
+    deepseek:
+      # 占位值保证不配 key 也能启动；业务侧 configured() 会把占位值视为未配置
+      api-key: ${DEEPSEEK_API_KEY:not-configured}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      chat:
+        # 2.0 起 chat 选项直接挂在 chat 下，不再使用 chat.options.*
+        # deepseek-chat / deepseek-reasoner 已于 2026-07-24 停止服务，当前为 deepseek-flash（V4.1 Flash）
+        model: ${DEEPSEEK_MODEL:deepseek-flash}
+        max-tokens: 8192
 
 mybatis-plus:
   configuration:
@@ -53,9 +65,6 @@ app:
       company-delay-millis: ${CRAWL_COMPANY_DELAY_MS:2000}
   ai:
     deepseek:
-      # OpenAI 兼容接口。api-key 只放在 application-local.yml 或环境变量中，
-      # 不要写进本文件、README 或前端代码。
-      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
-      api-key: ${DEEPSEEK_API_KEY:}
-      model: ${DEEPSEEK_MODEL:deepseek-chat}
+      # chat 的连接与模型配置已迁到 spring.ai.deepseek.*；
+      # 这里只保留 search/fetch 工具接口的读超时。
       timeout-seconds: ${DEEPSEEK_TIMEOUT_SECONDS:60}

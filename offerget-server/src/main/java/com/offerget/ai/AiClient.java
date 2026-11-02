@@ -5,6 +5,15 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.deepseek.DeepSeekChatOptions;
+import org.springframework.ai.deepseek.api.ResponseFormat;
+import org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatProperties;
+import org.springframework.ai.model.deepseek.autoconfigure.DeepSeekConnectionProperties;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -13,14 +22,16 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import com.offerget.common.BusinessException;
-import com.offerget.config.DeepSeekProperties;
+import com.offerget.config.DeepSeekConfig;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * DeepSeek OpenAI 兼容接口的薄封装。
- * 只负责发请求、取 choices[0].message.content、记日志；业务语义交给调用方。
- * 调用前检查密钥配置，避免把未配置状态带到业务逻辑里。
+ * AI 能力的统一入口。
+ *
+ * <p>chat 通过 Spring AI 的 ChatClient（DeepSeekChatModel）调用；search / fetch
+ * 是 DeepSeek 专有工具接口，仍走 RestClient。业务语义交给调用方，这里只负责
+ * 发请求、取正文、记日志，并把失败统一转成业务异常。</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -35,9 +46,13 @@ public class AiClient {
     /** 简历改写输出较长，默认值容易截断 JSON */
     private static final int MAX_TOKENS = 8192;
 
-    private final RestClient deepSeekRestClient;
+    private final ChatClient deepSeekChatClient;
 
-    private final DeepSeekProperties properties;
+    private final RestClient deepSeekToolsRestClient;
+
+    private final DeepSeekConnectionProperties deepSeekProperties;
+
+    private final DeepSeekChatProperties chatProperties;
 
     /**
      * 以 JSON 模式调用 chat completions，返回模型输出的原始 JSON 字符串。
@@ -54,32 +69,41 @@ public class AiClient {
      * temperature 由调用方按任务选择：评分偏低、出题偏高。
      */
     public String chatJson(List<Message> messages, double temperature) {
-        if (!properties.configured()) {
+        if (!configured()) {
             throw notConfigured();
         }
         if (messages == null || messages.isEmpty()) {
             throw BusinessException.badRequest("AI 消息不能为空");
         }
 
-        Map<String, Object> payload = Map.of(
-                "model", properties.model(),
-                "messages", messages.stream()
-                        .map(message -> Map.of("role", message.role(), "content", message.content()))
-                        .toList(),
-                "temperature", Math.max(0, Math.min(temperature, 2)),
-                "max_tokens", MAX_TOKENS,
-                "response_format", Map.of("type", "json_object"));
+        List<org.springframework.ai.chat.messages.Message> aiMessages = messages.stream()
+                .map(message -> "system".equals(message.role())
+                        ? (org.springframework.ai.chat.messages.Message) new SystemMessage(message.content())
+                        : new UserMessage(message.content()))
+                .toList();
+
+        // 从默认 options 派生，保留 YAML 中的 model 等配置：
+        // DeepSeekChatModel 在 prompt 自带 options 时不会与默认 options 合并
+        DeepSeekChatOptions options = chatProperties.toOptions()
+                .mutate()
+                .temperature(Math.max(0, Math.min(temperature, 2)))
+                .maxTokens(MAX_TOKENS)
+                .responseFormat(ResponseFormat.builder()
+                        .type(ResponseFormat.Type.JSON_OBJECT)
+                        .build())
+                .build();
 
         long started = System.currentTimeMillis();
         try {
-            Map<String, Object> response = deepSeekRestClient.post()
-                    .uri("/chat/completions")
-                    .body(payload)
-                    .retrieve()
-                    .body(MAP_TYPE);
+            ChatResponse response = deepSeekChatClient.prompt(new Prompt(aiMessages, options))
+                    .call()
+                    .chatResponse();
             long elapsed = System.currentTimeMillis() - started;
             log.info("DeepSeek chat 完成：耗时 {} ms，{}", elapsed, usageOf(response));
             return contentOf(response);
+        }
+        catch (BusinessException ex) {
+            throw ex;
         }
         catch (RestClientResponseException ex) {
             log.warn("DeepSeek chat 返回 {}：{}", ex.getStatusCode().value(),
@@ -90,13 +114,17 @@ public class AiClient {
             log.warn("DeepSeek chat 调用失败：{}", ex.getMessage());
             throw aiUnavailable();
         }
+        catch (RuntimeException ex) {
+            log.warn("DeepSeek chat 调用失败：{}", ex.getMessage());
+            throw aiUnavailable();
+        }
     }
 
     /**
      * 搜索网页。site: / after: 等运算符由调用方拼进 query。
      */
     public List<SearchResult> search(String query, int count) {
-        if (!properties.configured()) {
+        if (!configured()) {
             throw notConfigured();
         }
         Map<String, Object> payload = Map.of(
@@ -105,7 +133,7 @@ public class AiClient {
 
         long started = System.currentTimeMillis();
         try {
-            Map<String, Object> response = deepSeekRestClient.post()
+            Map<String, Object> response = deepSeekToolsRestClient.post()
                     .uri("/v1/tools/search")
                     .body(payload)
                     .retrieve()
@@ -129,12 +157,12 @@ public class AiClient {
      * 抓取单个网页并转成 Markdown。失败时抛异常，由调用方决定是否跳过。
      */
     public String fetchMarkdown(String url) {
-        if (!properties.configured()) {
+        if (!configured()) {
             throw notConfigured();
         }
         long started = System.currentTimeMillis();
         try {
-            Map<String, Object> response = deepSeekRestClient.post()
+            Map<String, Object> response = deepSeekToolsRestClient.post()
                     .uri("/v1/tools/fetch")
                     .body(Map.of("url", url))
                     .retrieve()
@@ -153,6 +181,10 @@ public class AiClient {
             log.warn("DeepSeek fetch 调用失败：{} {}", url, ex.getMessage());
             throw aiUnavailable();
         }
+    }
+
+    private boolean configured() {
+        return DeepSeekConfig.configured(deepSeekProperties.getApiKey());
     }
 
     private List<SearchResult> resultsOf(Map<String, Object> response) {
@@ -191,28 +223,21 @@ public class AiClient {
         return BusinessException.badRequest("未配置 DeepSeek 密钥，请先在 application-local.yml 中填写 api-key");
     }
 
-    private String contentOf(Map<String, Object> response) {
-        if (response == null) {
+    private String contentOf(ChatResponse response) {
+        if (response == null || response.getResult() == null) {
             throw aiUnavailable();
         }
-        if (!(response.get("choices") instanceof List<?> choices) || choices.isEmpty()) {
-            throw aiUnavailable();
-        }
-        if (!(choices.get(0) instanceof Map<?, ?> choice)) {
-            throw aiUnavailable();
-        }
-        if (!(choice.get("message") instanceof Map<?, ?> message)) {
-            throw aiUnavailable();
-        }
-        if (!(message.get("content") instanceof String text) || text.isBlank()) {
+        String text = response.getResult().getOutput().getText();
+        if (text == null || text.isBlank()) {
             throw aiUnavailable();
         }
         return text.trim();
     }
 
-    private String usageOf(Map<String, Object> response) {
-        if (response != null && response.get("usage") instanceof Map<?, ?> usage) {
-            return "tokens=" + usage.get("total_tokens");
+    private String usageOf(ChatResponse response) {
+        if (response != null && response.getMetadata() != null
+                && response.getMetadata().getUsage() != null) {
+            return "tokens=" + response.getMetadata().getUsage().getTotalTokens();
         }
         return "tokens=-";
     }

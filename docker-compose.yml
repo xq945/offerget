@@ -1,12 +1,12 @@
 # OfferGet 本地开发数据库
-# 独立实例跑在 3307，不占用本机 MySQL 的 3306
+# 独立实例跑在 13307，不占用本机 MySQL 的 3306 与其它项目的 3307
 services:
   mysql:
     image: mysql:8.0
     container_name: offerget-mysql
     restart: unless-stopped
     ports:
-      - "3307:3306"
+      - "13307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: offerget123
       MYSQL_DATABASE: offerget
