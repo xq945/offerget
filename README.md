@@ -9,7 +9,7 @@
 ### 一期（已实现）
 
 - **营销首页**：Hero 产品演示、核心能力、价值主张、行动入口
-- **账号体系**：注册 / 登录，BCrypt 加密，无状态 JWT，前端路由守卫
+- **账号体系**：注册 / 登录（账号密码 + 邮箱验证码），BCrypt 加密，无状态 JWT，邮箱全局唯一绑定，前端路由守卫
 - **校招总览**：四项统计、本周投递趋势、3 天内截止、今日待办、AI 建议、投递台历
 - **我的投递**：岗位增删改查、状态流转、状态筛选、关键词搜索、分页
 - **简历管理**：PDF / DOC / DOCX / TXT 上传，Tika 解析文本，多版本管理，默认版本，内容预览
@@ -41,6 +41,7 @@
 | 前端 | Vue 3.5、Vite 8、Vue Router 5、Pinia 4、Element Plus 2.14、Tailwind CSS 4、axios、lucide-vue-next |
 | 后端 | Java 21、Spring Boot 4.1.1、Spring Security、MyBatis-Plus 3.5.17、Spring AI 2.0.1（DeepSeek starter）、jjwt 0.12.7、Apache Tika 3.3.2、Lombok |
 | 数据库 | MySQL 8.0（Docker，独立实例） |
+| 缓存 | Redis 7.4（Docker，登录验证码与限流计数） |
 | 构建 | Maven / npm |
 
 ## 目录结构
@@ -87,7 +88,7 @@ offerget/
 docker compose up -d
 ```
 
-首次启动会自动执行 `Mysql/offerget_init.sql`，创建 `offerget` 库、13 张表与演示数据。容器健康检查通过后即可使用。
+首次启动会自动执行 `Mysql/offerget_init.sql`，创建 `offerget` 库、13 张表与演示数据；同时启动 Redis（13379），用于邮箱验证码缓存。容器健康检查通过后即可使用。
 
 如果数据库是从一期升级而来（表已存在），执行一次二期迁移：
 
@@ -99,6 +100,12 @@ docker exec -i offerget-mysql mysql -uroot -pofferget123 offerget < Mysql/migrat
 
 ```bash
 docker exec -i offerget-mysql mysql -uroot -pofferget123 offerget < Mysql/migration/20261029_mock_interview.sql
+```
+
+使用邮箱验证码登录还需执行邮箱唯一索引迁移（已执行过的可跳过）：
+
+```bash
+docker exec -i offerget-mysql mysql -uroot -pofferget123 offerget < Mysql/migration/20261109_email_login.sql
 ```
 
 ### 2. 启动后端
@@ -140,6 +147,18 @@ npm run dev
 | `APP_JWT_EXPIRATION_SECONDS` | `7200` | Token 有效期 |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5175` | 允许的前端来源 |
 | `APP_FILE_STORAGE_ROOT` | `./uploads` | 简历文件存储目录 |
+| `REDIS_HOST` | `localhost` | Redis 地址 |
+| `REDIS_PORT` | `13379` | Redis 端口 |
+| `REDIS_PASSWORD` | 空 | Redis 密码 |
+| `MAIL_HOST` | `smtp.qq.com` | SMTP 服务器 |
+| `MAIL_PORT` | `465` | SMTP 端口（SSL） |
+| `MAIL_USERNAME` | 空 | SMTP 账号（发件邮箱） |
+| `MAIL_PASSWORD` | 空 | SMTP 授权码（QQ 邮箱填授权码，不是登录密码） |
+| `EMAIL_CODE_TTL` | `5m` | 登录验证码有效期 |
+| `EMAIL_CODE_COOLDOWN` | `60s` | 同一邮箱发送冷却 |
+| `EMAIL_CODE_MAX_ATTEMPTS` | `5` | 验证码最大错误次数 |
+| `EMAIL_CODE_DAILY_LIMIT` | `10` | 同一邮箱每日发送上限 |
+| `EMAIL_CODE_IP_HOURLY_LIMIT` | `20` | 同一 IP 每小时发送上限 |
 | `DEEPSEEK_API_KEY` | 空 | DeepSeek 密钥，仅服务端使用，不可下发前端 |
 | `DEEPSEEK_MODEL` | `deepseek-flash` | DeepSeek 模型名（当前为 V4.1 Flash；`deepseek-chat` 已于 2026-07-24 停用） |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容接口地址 |
@@ -159,7 +178,9 @@ npm run dev
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/api/auth/register` | 注册 |
-| POST | `/api/auth/login` | 登录 |
+| POST | `/api/auth/login` | 账号密码登录 |
+| POST | `/api/auth/email-code` | 发送邮箱登录验证码 |
+| POST | `/api/auth/login/email` | 邮箱验证码登录 |
 | GET | `/api/auth/me` | 当前用户 |
 | GET | `/api/jobs` | 岗位分页（status / keyword） |
 | GET / POST | `/api/jobs`、`/api/jobs/{id}` | 详情 / 新增 |
@@ -211,7 +232,7 @@ npm run dev
 
 | 表 | 说明 |
 |---|---|
-| `app_user` | 用户 |
+| `app_user` | 用户（邮箱全局唯一，允许多个 NULL） |
 | `job` | 投递岗位 |
 | `resume` | 简历版本 |
 | `ai_match_record` | AI 匹配记录 |
@@ -243,6 +264,17 @@ docker compose up -d
 **简历上传后没有解析出文本？**
 扫描版 PDF 或纯图片简历无法提取文字，请上传文字版 PDF / DOCX。文件上限 10MB。
 
+**邮箱验证码登录怎么配置？**
+在 `application-local.yml` 填 `spring.mail.username`（发件 QQ 邮箱）与 `spring.mail.password`（QQ 邮箱授权码：设置 → 账号 → 开启 POP3/IMAP/SMTP 服务 → 生成授权码），并确保 Redis 已启动。未配置 SMTP 时该方式返回 503，不影响账号密码登录等其他功能。可先运行冒烟测试确认 SMTP 可用：
+
+```bash
+cd offerget-server
+MAIL_USERNAME=你的QQ邮箱 MAIL_PASSWORD=授权码 MAIL_TO=收件邮箱 mvn test -Dtest=MailSmokeTest
+```
+
+**验证码收不到 / 提示未绑定邮箱？**
+验证码只发送给「已注册且已绑定该邮箱」的账号，新邮箱不会自动注册；请先在注册或个人中心绑定邮箱。60 秒内重复发送会冷却，同一邮箱每日最多 10 次、同一 IP 每小时最多 20 次。邮件可能进垃圾箱，后端日志会记录发送失败原因（不含验证码）。
+
 **AI 匹配是怎么实现的？**
 本地规则引擎：从 JD 中提取技能词典命中词，按权重计算简历命中率，并结合实习、项目、竞赛经历加权，不依赖外部大模型，也不会上传简历内容。简历优化复用同一套词典，按简历段落生成补充建议和预估分。
 
@@ -267,6 +299,8 @@ docker compose up -d
 ## AI 接入状态
 
 DeepSeek chat 已接入 Spring AI（`spring.ai.deepseek.*`，2.0 起 chat 选项直接挂在 `chat` 下）：业务统一通过 `ChatClient` 调用，JSON 模式由 `DeepSeekChatOptions.responseFormat` 设置；Search / Fetch 是 DeepSeek 专有工具接口，Spring AI 没有对应抽象，仍由 `RestClient` 封装。密钥只存放在 `application-local.yml` 或环境变量；未配置时 `spring.ai.deepseek.api-key` 取占位值，应用照常启动，`GET /api/ai/config` 返回 `configured=false`。
+
+**邮箱验证码登录**通过 SMTP 发送 6 位验证码（默认 5 分钟有效、一次性消费、错误 5 次作废），验证码只存于 Redis，不写入数据库；邮件仅包含验证码与有效期，不涉及简历或其他个人资料。
 
 **AI 简历定制**已接入 DeepSeek（`deepseek-flash`）：调用时会发送岗位 JD 与简历文本至 DeepSeek，仅用于本次改写。模型只做重组与措辞调整，输出再经过事实校验（新增技能、数字、年份、强动词）与逐段人工确认，才会写入新版本；原版本始终保留。未配置密钥时该功能不可用，不影响其他模块。
 

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -8,13 +8,16 @@ import {
   Eye,
   EyeOff,
   FileText,
+  KeyRound,
   Lock,
+  Mail,
   ShieldCheck,
   Sparkles,
   Target,
   User,
 } from 'lucide-vue-next'
 
+import { sendEmailCode } from '@/api/auth'
 import BrandLogo from '@/components/BrandLogo.vue'
 import { useUserStore } from '@/stores/user'
 
@@ -22,30 +25,55 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const mode = ref('login')
+const loginMethod = ref('password')
 const showPassword = ref(false)
 const submitting = ref(false)
+const sending = ref(false)
+const countdown = ref(0)
+let countdownTimer = null
 
 const form = reactive({
   username: '',
   password: '',
   nickname: '',
+  email: '',
+  code: '',
   graduationYear: 2027,
 })
 
 const isLogin = computed(() => mode.value === 'login')
+const isEmailLogin = computed(() => isLogin.value && loginMethod.value === 'email')
 const title = computed(() => (isLogin.value ? '欢迎回来' : '创建你的 OfferGet 账号'))
-const subtitle = computed(() =>
-  isLogin.value
-    ? '登录后继续推进今天的投递节奏'
-    : '注册后即可管理岗位、简历版本与投递进度',
-)
+const subtitle = computed(() => {
+  if (!isLogin.value) {
+    return '注册后即可管理岗位、简历版本与投递进度'
+  }
+  return isEmailLogin.value
+    ? '验证码将发送到已绑定邮箱，免密码登录'
+    : '登录后继续推进今天的投递节奏'
+})
+const codeButtonText = computed(() => {
+  if (countdown.value > 0) {
+    return `${countdown.value} 秒后重发`
+  }
+  return sending.value ? '发送中…' : '发送验证码'
+})
 
 const yearOptions = Array.from({ length: 8 }, (_, index) => 2025 + index)
 
 function switchMode(next) {
   mode.value = next
+  loginMethod.value = 'password'
   form.password = ''
+  form.code = ''
+}
+
+function switchLoginMethod(method) {
+  loginMethod.value = method
+  form.code = ''
 }
 
 function fillDemo() {
@@ -53,7 +81,64 @@ function fillDemo() {
   form.password = 'demo123'
 }
 
+function startCountdown(seconds = 60) {
+  countdown.value = seconds
+  clearInterval(countdownTimer)
+  countdownTimer = setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
+
+onBeforeUnmount(() => {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+  }
+})
+
+async function sendCode() {
+  if (!EMAIL_PATTERN.test(form.email.trim())) {
+    ElMessage.warning('请输入正确的邮箱')
+    return
+  }
+  sending.value = true
+  try {
+    const data = await sendEmailCode({ email: form.email.trim() })
+    ElMessage.success('验证码已发送，请查收邮箱')
+    // 倒计时以服务端配置为准，避免前端硬编码
+    startCountdown(data?.cooldownSeconds ?? 60)
+  }
+  catch (error) {
+    // 429 文案里带剩余秒数，顺手进入倒计时，避免用户反复点击
+    if (error.httpStatus === 429) {
+      const seconds = Number((error.message || '').match(/(\d+)\s*秒/)?.[1])
+      if (seconds > 0) {
+        startCountdown(seconds)
+      }
+    }
+    ElMessage.error(error.message || '验证码发送失败，请稍后重试')
+  }
+  finally {
+    sending.value = false
+  }
+}
+
 function validate() {
+  if (isEmailLogin.value) {
+    if (!EMAIL_PATTERN.test(form.email.trim())) {
+      ElMessage.warning('请输入正确的邮箱')
+      return false
+    }
+    if (!/^\d{6}$/.test(form.code.trim())) {
+      ElMessage.warning('请输入 6 位验证码')
+      return false
+    }
+    return true
+  }
+
   if (!form.username.trim()) {
     ElMessage.warning('请输入用户名')
     return false
@@ -75,6 +160,10 @@ function validate() {
       ElMessage.warning('密码至少 6 位')
       return false
     }
+    if (form.email.trim() && !EMAIL_PATTERN.test(form.email.trim())) {
+      ElMessage.warning('邮箱格式不正确')
+      return false
+    }
   }
   return true
 }
@@ -85,23 +174,33 @@ async function submit() {
   }
   submitting.value = true
   try {
-    if (isLogin.value) {
+    if (!isLogin.value) {
+      await userStore.register({
+        username: form.username.trim(),
+        password: form.password,
+        nickname: form.nickname.trim(),
+        email: form.email.trim() || null,
+        graduationYear: form.graduationYear,
+      })
+      ElMessage.success('注册成功，已为你创建专属工作台')
+    }
+    else if (isEmailLogin.value) {
+      await userStore.loginByEmailCode({
+        email: form.email.trim(),
+        code: form.code.trim(),
+      })
+      ElMessage.success(`欢迎回来，${userStore.displayName}`)
+    }
+    else {
       await userStore.login({
         username: form.username.trim(),
         password: form.password,
       })
       ElMessage.success(`欢迎回来，${userStore.displayName}`)
     }
-    else {
-      await userStore.register({
-        username: form.username.trim(),
-        password: form.password,
-        nickname: form.nickname.trim(),
-        graduationYear: form.graduationYear,
-      })
-      ElMessage.success('注册成功，已为你创建专属工作台')
-    }
-    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+    const redirect = typeof route.query.redirect === 'string'
+      && route.query.redirect.startsWith('/')
+      && !route.query.redirect.startsWith('//')
       ? route.query.redirect
       : '/app/dashboard'
     router.replace(redirect)
@@ -196,63 +295,150 @@ async function submit() {
               <p class="mt-2 text-sm text-slate-500">{{ subtitle }}</p>
             </div>
 
-            <!-- 账号密码 / 注册 -->
-            <form class="mt-6 space-y-4" @submit.prevent="submit">
-              <div>
-                <label class="mb-1.5 block text-xs font-bold text-slate-600">用户名</label>
-                <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
-                  <User class="h-4 w-4 shrink-0 text-slate-400" />
-                  <input
-                    v-model="form.username"
-                    type="text"
-                    autocomplete="username"
-                    placeholder="请输入用户名"
-                    class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                  />
-                </div>
-              </div>
+            <!-- 登录方式切换 -->
+            <div v-if="isLogin" class="mt-5 flex gap-1.5 rounded-2xl bg-white/70 p-1.5 ring-1 ring-blue-100">
+              <button
+                type="button"
+                class="flex-1 rounded-xl px-4 py-2 text-xs font-bold transition"
+                :class="loginMethod === 'password'
+                  ? 'bg-blue-600 text-white shadow-[0_8px_16px_rgba(37,99,235,0.2)]'
+                  : 'text-slate-500 hover:bg-blue-50 hover:text-blue-700'"
+                @click="switchLoginMethod('password')"
+              >
+                账号密码登录
+              </button>
+              <button
+                type="button"
+                class="flex-1 rounded-xl px-4 py-2 text-xs font-bold transition"
+                :class="loginMethod === 'email'
+                  ? 'bg-blue-600 text-white shadow-[0_8px_16px_rgba(37,99,235,0.2)]'
+                  : 'text-slate-500 hover:bg-blue-50 hover:text-blue-700'"
+                @click="switchLoginMethod('email')"
+              >
+                邮箱验证码登录
+              </button>
+            </div>
 
-              <div v-if="!isLogin" class="grid gap-4 sm:grid-cols-2">
+            <form class="mt-6 space-y-4" @submit.prevent="submit">
+              <!-- 账号密码登录 / 注册 -->
+              <template v-if="!isEmailLogin">
                 <div>
-                  <label class="mb-1.5 block text-xs font-bold text-slate-600">昵称</label>
+                  <label class="mb-1.5 block text-xs font-bold text-slate-600">用户名</label>
                   <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
                     <User class="h-4 w-4 shrink-0 text-slate-400" />
                     <input
-                      v-model="form.nickname"
+                      v-model="form.username"
                       type="text"
-                      placeholder="怎么称呼你"
+                      autocomplete="username"
+                      placeholder="请输入用户名"
                       class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
                     />
                   </div>
                 </div>
-                <div>
-                  <label class="mb-1.5 block text-xs font-bold text-slate-600">毕业年份</label>
-                  <select
-                    v-model="form.graduationYear"
-                    class="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
-                  >
-                    <option v-for="year in yearOptions" :key="year" :value="year">{{ year }} 届</option>
-                  </select>
-                </div>
-              </div>
 
-              <div>
-                <label class="mb-1.5 block text-xs font-bold text-slate-600">密码</label>
-                <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
-                  <Lock class="h-4 w-4 shrink-0 text-slate-400" />
-                  <input
-                    v-model="form.password"
-                    :type="showPassword ? 'text' : 'password'"
-                    :autocomplete="isLogin ? 'current-password' : 'new-password'"
-                    :placeholder="isLogin ? '请输入密码' : '至少 6 位'"
-                    class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                  />
-                  <button type="button" class="text-slate-400 transition hover:text-slate-600" @click="showPassword = !showPassword">
-                    <EyeOff v-if="showPassword" class="h-4 w-4" />
-                    <Eye v-else class="h-4 w-4" />
-                  </button>
+                <div v-if="!isLogin" class="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label class="mb-1.5 block text-xs font-bold text-slate-600">昵称</label>
+                    <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
+                      <User class="h-4 w-4 shrink-0 text-slate-400" />
+                      <input
+                        v-model="form.nickname"
+                        type="text"
+                        placeholder="怎么称呼你"
+                        class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label class="mb-1.5 block text-xs font-bold text-slate-600">毕业年份</label>
+                    <select
+                      v-model="form.graduationYear"
+                      class="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                    >
+                      <option v-for="year in yearOptions" :key="year" :value="year">{{ year }} 届</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
+
+                <div v-if="!isLogin">
+                  <label class="mb-1.5 block text-xs font-bold text-slate-600">
+                    邮箱 <span class="font-normal text-slate-400">（可选，用于验证码登录）</span>
+                  </label>
+                  <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
+                    <Mail class="h-4 w-4 shrink-0 text-slate-400" />
+                    <input
+                      v-model="form.email"
+                      type="email"
+                      autocomplete="email"
+                      maxlength="120"
+                      placeholder="example@qq.com"
+                      class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="mb-1.5 block text-xs font-bold text-slate-600">密码</label>
+                  <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
+                    <Lock class="h-4 w-4 shrink-0 text-slate-400" />
+                    <input
+                      v-model="form.password"
+                      :type="showPassword ? 'text' : 'password'"
+                      :autocomplete="isLogin ? 'current-password' : 'new-password'"
+                      :placeholder="isLogin ? '请输入密码' : '至少 6 位'"
+                      class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                    />
+                    <button type="button" class="text-slate-400 transition hover:text-slate-600" @click="showPassword = !showPassword">
+                      <EyeOff v-if="showPassword" class="h-4 w-4" />
+                      <Eye v-else class="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 邮箱验证码登录 -->
+              <template v-else>
+                <div>
+                  <label class="mb-1.5 block text-xs font-bold text-slate-600">邮箱</label>
+                  <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
+                    <Mail class="h-4 w-4 shrink-0 text-slate-400" />
+                    <input
+                      v-model="form.email"
+                      type="email"
+                      autocomplete="email"
+                      maxlength="120"
+                      placeholder="请输入已绑定邮箱"
+                      class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="mb-1.5 block text-xs font-bold text-slate-600">验证码</label>
+                  <div class="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-2 transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
+                    <KeyRound class="h-4 w-4 shrink-0 text-slate-400" />
+                    <input
+                      v-model="form.code"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="6"
+                      autocomplete="one-time-code"
+                      placeholder="6 位数字验证码"
+                      class="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                      @input="form.code = form.code.replace(/\D/g, '').slice(0, 6)"
+                    />
+                    <button
+                      type="button"
+                      :disabled="sending || countdown > 0"
+                      class="shrink-0 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      @click="sendCode"
+                    >
+                      {{ codeButtonText }}
+                    </button>
+                  </div>
+                  <p class="mt-1.5 text-[11px] text-slate-400">验证码 5 分钟内有效，仅发送到已绑定邮箱</p>
+                </div>
+              </template>
 
               <button
                 type="submit"
@@ -261,7 +447,7 @@ async function submit() {
               >
                 <CheckCircle2 v-if="!submitting" class="h-4 w-4" />
                 <span v-if="submitting" class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                {{ submitting ? '处理中…' : isLogin ? '登录' : '注册并进入工作台' }}
+                {{ submitting ? '处理中…' : isEmailLogin ? '验证码登录' : isLogin ? '登录' : '注册并进入工作台' }}
               </button>
 
               <div class="flex items-center justify-between text-xs">
@@ -269,7 +455,7 @@ async function submit() {
                   {{ isLogin ? '还没有账号？立即注册' : '已有账号？直接登录' }}
                 </button>
                 <button
-                  v-if="isLogin"
+                  v-if="isLogin && !isEmailLogin"
                   type="button"
                   class="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-600 transition hover:bg-blue-100"
                   @click="fillDemo"
@@ -279,9 +465,13 @@ async function submit() {
               </div>
             </form>
 
-            <div class="mt-6 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-slate-500">
+            <div v-if="!isEmailLogin" class="mt-6 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-slate-500">
               <p class="font-semibold text-slate-600">演示账号</p>
               <p class="mt-1">用户名 <span class="font-mono text-blue-700">demo</span> · 密码 <span class="font-mono text-blue-700">demo123</span></p>
+            </div>
+            <div v-else class="mt-6 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-slate-500">
+              <p class="font-semibold text-slate-600">还没有绑定邮箱？</p>
+              <p class="mt-1">先用账号密码登录，再到「个人中心」填写邮箱。邮箱全局唯一，绑定后即可免密码登录。</p>
             </div>
           </section>
         </div>

@@ -18,4 +18,11 @@ public record UpdateProfileRequest(
         @Min(value = 2024, message = "毕业年份不合法")
         @Max(value = 2035, message = "毕业年份不合法")
         Integer graduationYear) {
+
+    /** 校验注解在构造后执行，先去掉昵称与邮箱的前后空格。 */
+    public UpdateProfileRequest {
+        nickname = nickname == null ? null : nickname.trim();
+        email = email == null ? null : email.trim();
+    }
+
 }

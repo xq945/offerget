@@ -32,7 +32,8 @@ CREATE TABLE app_user (
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_user_username (username)
+    UNIQUE KEY uk_user_username (username),
+    UNIQUE KEY uk_user_email (email)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '用户';
 
 -- ---------------- 岗位 ----------------

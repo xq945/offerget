@@ -5,6 +5,17 @@ spring:
   datasource:
     username: root
     password: offerget123
+  mail:
+    # QQ 邮箱：设置 → 账号 → 开启 POP3/SMTP 服务 → 生成授权码，
+    # 这里填授权码而不是 QQ 登录密码；发件人固定为 username。
+    # 不填时应用照常启动，仅邮箱验证码登录不可用。
+    username: your-qq-number@qq.com
+    password: your-smtp-authorization-code
+  data:
+    redis:
+      # 默认连接 docker-compose 中的 offerget-redis（13379）
+      host: localhost
+      port: 13379
   ai:
     deepseek:
       # 在 https://platform.deepseek.com 创建，只填在本地文件或环境变量里

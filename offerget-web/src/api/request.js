@@ -13,7 +13,12 @@ const request = axios.create({
 
 export const LOCAL_ERROR_CODE = -1
 
-const CREDENTIAL_ENDPOINTS = ['/auth/login', '/auth/register']
+const CREDENTIAL_ENDPOINTS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/email-code',
+  '/auth/login/email',
+]
 
 let unauthorizedHandler = null
 

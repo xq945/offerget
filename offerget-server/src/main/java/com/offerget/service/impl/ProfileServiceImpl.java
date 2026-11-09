@@ -3,13 +3,14 @@ package com.offerget.service.impl;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.offerget.common.BusinessException;
+import com.offerget.common.EmailNormalizer;
 import com.offerget.dto.profile.ChangePasswordRequest;
 import com.offerget.dto.profile.ProfileVO;
 import com.offerget.dto.profile.UpdateProfileRequest;
@@ -54,10 +55,19 @@ public class ProfileServiceImpl implements ProfileService {
     @Transactional
     public ProfileVO update(UpdateProfileRequest request) {
         AppUser user = requireUser();
+        String email = EmailNormalizer.normalize(request.email());
+        if (email != null && emailExists(email, user.getId())) {
+            throw BusinessException.conflict("该邮箱已被其他账号绑定");
+        }
         user.setNickname(request.nickname().trim());
-        user.setEmail(StringUtils.hasText(request.email()) ? request.email().trim() : null);
+        user.setEmail(email);
         user.setGraduationYear(request.graduationYear());
-        userMapper.updateById(user);
+        try {
+            userMapper.updateById(user);
+        }
+        catch (DuplicateKeyException ex) {
+            throw BusinessException.conflict("该邮箱已被其他账号绑定");
+        }
         return toVO(user);
     }
 
@@ -81,6 +91,13 @@ public class ProfileServiceImpl implements ProfileService {
             throw BusinessException.unauthorized("账号不存在或已停用");
         }
         return user;
+    }
+
+    private boolean emailExists(String email, Long excludeUserId) {
+        Long count = userMapper.selectCount(new LambdaQueryWrapper<AppUser>()
+                .eq(AppUser::getEmail, email)
+                .ne(AppUser::getId, excludeUserId));
+        return count != null && count > 0;
     }
 
     private ProfileVO toVO(AppUser user) {

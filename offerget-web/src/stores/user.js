@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 
-import { fetchMe, login as loginApi, register as registerApi } from '@/api/auth'
+import {
+  fetchMe,
+  login as loginApi,
+  loginByEmailCode as loginByEmailCodeApi,
+  register as registerApi,
+} from '@/api/auth'
 import {
   clearAuth,
   readToken,
@@ -43,6 +48,11 @@ export const useUserStore = defineStore('user', {
 
     async register(payload) {
       const data = await registerApi(payload)
+      this.applyAuth(data)
+    },
+
+    async loginByEmailCode(payload) {
+      const data = await loginByEmailCodeApi(payload)
       this.applyAuth(data)
     },
 

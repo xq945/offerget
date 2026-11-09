@@ -100,7 +100,7 @@ async function saveProfile() {
   try {
     const data = await updateProfile({
       nickname: form.nickname,
-      email: form.email || null,
+      email: form.email.trim() || null,
       graduationYear: form.graduationYear,
     })
     profile.value = data
@@ -288,7 +288,7 @@ onMounted(loadProfile)
                 <el-input :model-value="profile.username" disabled />
               </el-form-item>
               <el-form-item label="邮箱" prop="email">
-                <el-input v-model="form.email" placeholder="用于接收通知（可选）">
+                <el-input v-model="form.email" maxlength="120" placeholder="绑定后可用于邮箱验证码登录（可选）">
                   <template #prefix>
                     <Mail class="h-4 w-4 text-slate-400" />
                   </template>

@@ -1,5 +1,6 @@
-# OfferGet 本地开发数据库
-# 独立实例跑在 13307，不占用本机 MySQL 的 3306 与其它项目的 3307
+# OfferGet 本地开发依赖
+# MySQL 独立实例跑在 13307，不占用本机 3306 与其它项目的 3307
+# Redis 跑在 13379，不占用本机 6379
 services:
   mysql:
     image: mysql:8.0
@@ -25,5 +26,24 @@ services:
       timeout: 5s
       retries: 20
 
+  redis:
+    image: redis:7.4-alpine
+    container_name: offerget-redis
+    restart: unless-stopped
+    ports:
+      # 只绑定回环地址：Redis 无密码，避免同一网络内被直接访问
+      - "127.0.0.1:13379:6379"
+    command:
+      - --appendonly
+      - "yes"
+    volumes:
+      - offerget-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   offerget-mysql-data:
+  offerget-redis-data:
